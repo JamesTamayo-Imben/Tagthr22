@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase, Session, getParticipantToken } from '../../lib/supabaseClient';
-import { Clock, Crown, Users } from 'lucide-react';
+import { supabase, Session, getParticipantToken, sessionOperations, participantOperations } from '../../lib/supabaseClient';
+import { Clock, Crown, Users, Play, Lock, MoreVertical, Power, RotateCw } from 'lucide-react';
+import Navigation from './Navigation';
 
 interface RecentSession extends Session {
   role: 'host' | 'member';
@@ -11,6 +12,7 @@ interface RecentSession extends Session {
 export default function RecentParties() {
   const [sessions, setSessions] = useState<RecentSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -34,7 +36,7 @@ export default function RecentParties() {
         `)
         .eq('participant_token', token)
         .order('last_visited_at', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (error) {
         console.error('Error fetching recent sessions:', error);
@@ -65,29 +67,6 @@ export default function RecentParties() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-          <Clock className="w-6 h-6" />
-          Recent Parties
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] p-4 animate-pulse">
-              <div className="h-4 bg-[#2A2A2A] rounded w-3/4 mb-2"></div>
-              <div className="h-3 bg-[#2A2A2A] rounded w-1/2"></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (sessions.length === 0) {
-    return null;
-  }
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -107,53 +86,137 @@ export default function RecentParties() {
     return new Date(expiresAt) < new Date();
   };
 
+  const handleEndSession = async (sessionId: number) => {
+    try {
+      await sessionOperations.updateSession(sessionId, { is_active: false });
+      // Refresh the list
+      fetchRecentSessions();
+      setOpenMenuId(null);
+    } catch (err) {
+      console.error('Error ending session:', err);
+    }
+  };
+
+  const handleTransferHost = (session: RecentSession) => {
+    if (session.role === 'host') {
+      // In a real implementation, you'd open a dialog to select who to transfer to
+      console.log('Transfer host for session:', session.id);
+      // For now, just show a message
+      alert('Transfer host feature coming soon!');
+      setOpenMenuId(null);
+    }
+  };
+
+  const handleResetSession = async (sessionId: number) => {
+    try {
+      // Reset session by clearing participants and video
+      await sessionOperations.updateSession(sessionId, { 
+        video_url: null,
+        metadata: null
+      });
+      // Refresh the list
+      fetchRecentSessions();
+      setOpenMenuId(null);
+    } catch (err) {
+      console.error('Error resetting session:', err);
+    }
+  };
+
   return (
-    <div className="mt-12">
-      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-        <Clock className="w-6 h-6 text-[#8B5CF6]" />
-        Recent Parties
-      </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {sessions.map((session) => (
-          <div
-            key={session.id}
-            onClick={() => !isExpired(session.expires_at) && navigate(`/party/${session.slug}`)}
-            className={`bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] p-5 transition-all ${
-              !isExpired(session.expires_at)
-                ? 'cursor-pointer hover:border-[#8B5CF6] hover:shadow-lg'
-                : 'opacity-60 cursor-not-allowed'
-            }`}
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <div className="font-semibold text-white truncate">
-                  {session.metadata?.title || `Party ${session.slug}`}
-                </div>
-                <div className="text-sm text-[#9CA3AF] mt-1">
-                  {session.metadata?.year && `${session.metadata.year} • `}
-                  Room: {session.slug}
-                </div>
-              </div>
-              {session.role === 'host' && (
-                <Crown className="w-5 h-5 text-[#F59E0B] flex-shrink-0 ml-2" />
-              )}
-            </div>
+    <div className="min-h-screen bg-[#0A0A0A] text-white">
+      <Navigation />
 
-            <div className="flex items-center justify-between text-xs text-[#9CA3AF]">
-              <div className="flex items-center gap-1">
-                <Users className="w-3 h-3" />
-                <span>{session.role === 'host' ? 'You hosted' : 'You joined'}</span>
-              </div>
-              <span>{formatDate(session.last_visited_at)}</span>
-            </div>
-
-            {isExpired(session.expires_at) && (
-              <div className="mt-2 px-2 py-1 bg-[#EF4444]/20 text-[#EF4444] text-xs rounded text-center">
-                Expired
-              </div>
-            )}
+      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12">
+        <div className="mb-12">
+          <div className="flex items-center gap-3 mb-2">
+            <Clock className="w-8 h-8 text-[#06B6D4]" />
+            <h1 className="text-4xl font-bold">Recent Parties</h1>
           </div>
-        ))}
+          <p className="text-[#9CA3AF] ml-11">Join your previous watch parties or create a new one</p>
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] p-6 animate-pulse">
+                <div className="h-6 bg-[#2A2A2A] rounded w-3/4 mb-3"></div>
+                <div className="h-4 bg-[#2A2A2A] rounded w-1/2 mb-4"></div>
+                <div className="h-4 bg-[#2A2A2A] rounded w-2/3"></div>
+              </div>
+            ))}
+          </div>
+        ) : sessions.length === 0 ? (
+          <div className="text-center py-16">
+            <Clock className="w-16 h-16 text-[#9CA3AF] mx-auto mb-4 opacity-50" />
+            <p className="text-[#9CA3AF] text-lg mb-6">No recent parties yet</p>
+            <button
+              onClick={() => navigate('/')}
+              className="px-6 py-3 bg-[#06B6D4] hover:bg-[#0891B2] rounded-lg font-medium transition-colors"
+            >
+              Create Your First Party
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sessions.map((session) => (
+              <div
+                key={session.id}
+                onClick={() => !isExpired(session.expires_at) && navigate(`/party/${session.slug}`)}
+                className={`group bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] p-6 transition-all ${
+                  !isExpired(session.expires_at)
+                    ? 'cursor-pointer hover:border-[#06B6D4] hover:bg-[#1A1A1A]/80 hover:shadow-xl hover:shadow-[#06B6D4]/10'
+                    : 'opacity-60 cursor-not-allowed'
+                }`}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-lg text-white truncate group-hover:text-[#06B6D4] transition-colors">
+                      {session.metadata?.title || `Party ${session.slug}`}
+                    </h3>
+                    <div className="text-sm text-[#9CA3AF] mt-1 flex items-center gap-2">
+                      {session.pin_hash && (
+                        <Lock className="w-3 h-3" />
+                      )}
+                      <span>Room: <code className="bg-[#0A0A0A] px-2 py-1 rounded text-xs">{session.slug}</code></span>
+                    </div>
+                  </div>
+                  {session.role === 'host' && (
+                    <Crown className="w-5 h-5 text-[#F59E0B] flex-shrink-0 ml-2" />
+                  )}
+                </div>
+
+                {session.metadata?.year && (
+                  <p className="text-sm text-[#9CA3AF] mb-4">Year: {session.metadata.year}</p>
+                )}
+
+                <div className="flex items-center justify-between text-sm text-[#9CA3AF] mb-4">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    <span>{session.role === 'host' ? 'You hosted' : 'You joined'}</span>
+                  </div>
+                  <span>{formatDate(session.last_visited_at)}</span>
+                </div>
+
+                {isExpired(session.expires_at) ? (
+                  <div className="px-4 py-2 bg-[#EF4444]/20 text-[#EF4444] text-sm rounded-lg text-center font-medium">
+                    Expired
+                  </div>
+                ) : (
+                  <button
+                    className="w-full px-4 py-2 bg-[#06B6D4] hover:bg-[#0891B2] rounded-lg font-medium transition-colors flex items-center justify-center gap-2 group-hover:shadow-lg"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/party/${session.slug}`);
+                    }}
+                  >
+                    <Play className="w-4 h-4" />
+                    Continue Watching
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

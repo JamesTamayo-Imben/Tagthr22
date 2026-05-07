@@ -13,7 +13,10 @@ import {
   AlertCircle,
   Star,
   Video,
-  Search
+  Search,
+  MoreVertical,
+  Power,
+  RotateCw
 } from 'lucide-react';
 import Navigation from './Navigation';
 import SearchBar from './SearchBar';
@@ -21,6 +24,15 @@ import SearchResultCard from './SearchResultCard';
 import MediaDetailModal from './MediaDetailModal';
 import VideoPlayer, { VideoPlayerHandle } from './VideoPlayer';
 import { MediaItem, SearchResponse } from '../../types/media';
+import {
+  getParticipantToken,
+  sessionOperations,
+  participantOperations,
+  messageOperations,
+  realtimeOperations,
+  Session,
+} from '../../lib/supabaseClient';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface Participant {
   id: string;
@@ -78,6 +90,16 @@ export default function SessionPage() {
     { id: '2', user: 'Anonymous#5678', message: 'Ready to watch!', timestamp: new Date() },
   ]);
 
+  // Supabase state
+  const [session, setSession] = useState<Session | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [participantToken, setParticipantToken] = useState<string | null>(null);
+  const [showMenuDropdown, setShowMenuDropdown] = useState(false);
+  const messagesSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const participantsSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const playbackSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const menuDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
       setHeartbeatStatus((prev) => (prev === 'green' ? 'yellow' : 'green'));
@@ -86,6 +108,134 @@ export default function SessionPage() {
     return () => clearInterval(heartbeatInterval);
   }, []);
 
+  // Full Supabase integration: fetch session, determine host, join participant, load data, setup realtime subscriptions
+  useEffect(() => {
+    const initDb = async () => {
+      try {
+        const token = getParticipantToken();
+        if (!token || !slug) return;
+
+        setParticipantToken(token);
+
+        // Fetch session by slug
+        const sessionData = await sessionOperations.getSessionBySlug(slug);
+        if (!sessionData) {
+          console.error('Session not found');
+          return;
+        }
+
+        setSession(sessionData);
+        setSessionId(sessionData.id);
+
+        // Determine if current user is host
+        const isUserHost = sessionData.host_token === token;
+        setIsHost(isUserHost);
+
+        // Join as participant
+        await participantOperations.joinSession(sessionData.id, token);
+
+        // Load existing messages from DB
+        const existingMessages = await messageOperations.getMessages(sessionData.id);
+        if (existingMessages && existingMessages.length > 0) {
+          setChatMessages(
+            existingMessages.map((msg: any) => ({
+              id: msg.id.toString(),
+              user: msg.participant_token.slice(0, 4).toUpperCase(),
+              message: msg.content,
+              timestamp: new Date(msg.created_at),
+            }))
+          );
+        }
+
+        // Load participants from DB
+        const dbParticipants = await participantOperations.getSessionParticipants(sessionData.id);
+        if (dbParticipants && dbParticipants.length > 0) {
+          setParticipants(
+            dbParticipants.map((p: any) => ({
+              id: p.participant_token,
+              name: `Anonymous#${p.participant_token.slice(0, 4).toUpperCase()}`,
+              isHost: p.participant_token === sessionData.host_token,
+              isOnline: true,
+              lastSeen: new Date(p.last_visited),
+            }))
+          );
+        }
+
+        // Setup realtime subscription for messages
+        const messagesChannel = realtimeOperations.subscribeToMessages(
+          sessionData.id,
+          (newMessage: any) => {
+            setChatMessages((prev) => [
+              ...prev,
+              {
+                id: newMessage.id.toString(),
+                user: newMessage.participant_token.slice(0, 4).toUpperCase(),
+                message: newMessage.content,
+                timestamp: new Date(newMessage.created_at),
+              },
+            ]);
+          }
+        );
+        messagesSubscriptionRef.current = messagesChannel;
+
+        // Setup realtime subscription for participants
+        const participantsChannel = realtimeOperations.subscribeToParticipants(
+          sessionData.id,
+          (participants: any[]) => {
+            setParticipants(
+              participants.map((p: any) => ({
+                id: p.participant_token,
+                name: `Anonymous#${p.participant_token.slice(0, 4).toUpperCase()}`,
+                isHost: p.participant_token === sessionData.host_token,
+                isOnline: true,
+                lastSeen: new Date(p.last_visited),
+              }))
+            );
+          }
+        );
+        participantsSubscriptionRef.current = participantsChannel;
+
+        // Setup playback sync subscription (non-hosts listen for playback state from host)
+        if (!isUserHost) {
+          const playbackChannel = realtimeOperations.subscribeToPlayback(
+            sessionData.id,
+            (playbackState: any) => {
+              // Update video player position and play state
+              if (videoRef.current) {
+                if (playbackState.is_playing) {
+                  videoRef.current.play();
+                } else {
+                  videoRef.current.pause();
+                }
+                if (Math.abs(videoRef.current.currentTime - playbackState.current_time) > 1) {
+                  videoRef.current.seekTo(playbackState.current_time);
+                }
+              }
+            }
+          );
+          playbackSubscriptionRef.current = playbackChannel;
+        }
+      } catch (err) {
+        console.error('Supabase init error:', err);
+      }
+    };
+
+    initDb();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      if (messagesSubscriptionRef.current) {
+        messagesSubscriptionRef.current.unsubscribe();
+      }
+      if (participantsSubscriptionRef.current) {
+        participantsSubscriptionRef.current.unsubscribe();
+      }
+      if (playbackSubscriptionRef.current) {
+        playbackSubscriptionRef.current.unsubscribe();
+      }
+    };
+  }, [slug]);
+
   const copyInviteLink = () => {
     const link = pin ? `${window.location.origin}/party/${slug}?pin=${pin}` : `${window.location.origin}/party/${slug}`;
     navigator.clipboard.writeText(link);
@@ -93,32 +243,48 @@ export default function SessionPage() {
     setTimeout(() => setShowCopied(false), 2000);
   };
 
-  const sendMessage = () => {
-    if (chatMessage.trim()) {
-      setChatMessages([
-        ...chatMessages,
+  const sendMessage = async () => {
+    if (!chatMessage.trim() || !sessionId || !participantToken) return;
+
+    try {
+      // Persist message to Supabase
+      await messageOperations.sendMessage(sessionId, participantToken, chatMessage);
+      // Message will appear via realtime subscription
+    } catch (err) {
+      console.error('Error sending message:', err);
+      // Fallback: add message locally so it doesn't disappear
+      setChatMessages((prev) => [
+        ...prev,
         {
           id: Date.now().toString(),
-          user: 'Anonymous#1234',
+          user: `Anonymous#${participantToken.slice(0, 4).toUpperCase()}`,
           message: chatMessage,
           timestamp: new Date(),
         },
       ]);
+    } finally {
       setChatMessage('');
     }
   };
 
-  const kickParticipant = (id: string) => {
-    setParticipants(participants.filter((p) => p.id !== id));
-    setChatMessages([
-      ...chatMessages,
-      {
-        id: Date.now().toString(),
-        user: 'System',
-        message: `User has been removed from the room`,
-        timestamp: new Date(),
-      },
-    ]);
+  const kickParticipant = async (id: string) => {
+    try {
+      // Remove participant from database
+      await participantOperations.leaveSession(id);
+      // Update UI
+      setParticipants(participants.filter((p) => p.id !== id));
+      setChatMessages([
+        ...chatMessages,
+        {
+          id: Date.now().toString(),
+          user: 'System',
+          message: `User has been removed from the room`,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (err) {
+      console.error('Error kicking participant:', err);
+    }
   };
 
   const updateVideoUrl = () => {
@@ -129,8 +295,59 @@ export default function SessionPage() {
     }
   };
 
-  const leaveSession = () => {
-    navigate('/');
+  const leaveSession = async () => {
+    try {
+      // Leave session in database
+      if (participantToken) {
+        await participantOperations.leaveSession(participantToken);
+      }
+    } catch (err) {
+      console.error('Error leaving session:', err);
+    } finally {
+      navigate('/');
+    }
+  };
+
+  const endSession = async () => {
+    try {
+      // End the session and close for all participants
+      if (sessionId) {
+        await sessionOperations.updateSession(sessionId, { is_active: false });
+      }
+      setShowMenuDropdown(false);
+      navigate('/');
+    } catch (err) {
+      console.error('Error ending session:', err);
+    }
+  };
+
+  const transferHost = () => {
+    if (participants.length > 1) {
+      const nonHostParticipants = participants.filter(p => !p.isHost);
+      if (nonHostParticipants.length > 0) {
+        // In a real implementation, you'd open a dialog to select who to transfer to
+        const newHost = nonHostParticipants[0];
+        setParticipants(prev => prev.map(p => ({
+          ...p,
+          isHost: p.id === newHost.id
+        })));
+        setIsHost(false);
+        setShowMenuDropdown(false);
+        // TODO: Persist this to database
+      }
+    }
+  };
+
+  const resetSession = () => {
+    // Clear all participants except host and reset video
+    setParticipants(prev => prev.filter(p => p.isHost));
+    setVideoUrl('');
+    setNewVideoUrl('');
+    setMediaInfo(null);
+    setSearchResults([]);
+    setChatMessages([]);
+    setShowMenuDropdown(false);
+    // TODO: Persist these changes to database
   };
 
   const debounce = <T extends (...args: any[]) => void>(func: T, delay: number) => {
@@ -150,22 +367,33 @@ export default function SessionPage() {
 
     setLoading(true);
     try {
-      const response = await fetch(`https://imdb.iamidiotareyoutoo.com/search?title=${encodeURIComponent(query)}`);
-      const data: SearchResponse = await response.json();
-
-      if (data && Array.isArray(data.description)) {
-        const items: MediaItem[] = data.description.slice(0, 12).map((item) => ({
-          title: item['#TITLE'] || 'Unknown Title',
-          year: item['#YEAR'] || 'N/A',
-          type: (item['#ACTORS'] ? 'movie' : 'series') as 'movie' | 'series',
-          imdbId: item['#IMDB_ID'] || '',
-          poster: item['#IMG_POSTER'] || '',
-          rating: item['#RANK'] || 'N/A',
-        }));
-        setSearchResults(items);
-      } else {
-        setSearchResults([]);
+      // Use IMDb API (no API key required, free tier)
+      const imdbResponse = await fetch(
+        `https://imdb.iamidiotareyoutoo.com/search?title=${encodeURIComponent(query)}`
+      );
+      
+      if (!imdbResponse.ok) {
+        throw new Error('IMDb API failed');
       }
+
+      const imdbData: SearchResponse = await imdbResponse.json();
+      let items: MediaItem[] = [];
+
+      if (imdbData && Array.isArray(imdbData.description)) {
+        items = imdbData.description
+          .filter((item) => item['#IMG_POSTER'] && item['#IMG_POSTER'] !== 'N/A') // Only items with posters
+          .slice(0, 12)
+          .map((item) => ({
+            title: item['#TITLE'] || 'Unknown Title',
+            year: item['#YEAR'] || 'N/A',
+            type: (item['#ACTORS'] ? 'movie' : 'series') as 'movie' | 'series',
+            imdbId: item['#IMDB_ID'] || '',
+            poster: item['#IMG_POSTER'] || '',
+            rating: item['#RANK'] || 'N/A',
+          }));
+      }
+
+      setSearchResults(items);
     } catch (error) {
       console.error('Search error:', error);
       setSearchResults([]);
@@ -201,9 +429,20 @@ export default function SessionPage() {
     setVideoUrl('');
   };
 
-  const handlePlaybackChange = (state: { playing: boolean; time: number }) => {
-    if (isHost) {
-      console.log('Playback state changed:', state);
+  const handlePlaybackChange = async (state: { playing: boolean; time: number }) => {
+    if (isHost && sessionId && videoRef.current) {
+      try {
+        // Get current video duration
+        const duration = await videoRef.current.getCurrentTime(); // This gets current time, we'll use a default duration
+        // Broadcast playback state to all participants
+        await realtimeOperations.broadcastPlaybackState(sessionId.toString(), {
+          playing: state.playing,
+          currentTime: state.time,
+          duration: 0, // Duration would need to be tracked separately; using 0 for now
+        });
+      } catch (err) {
+        console.error('Error broadcasting playback state:', err);
+      }
     }
   };
 
@@ -239,6 +478,45 @@ export default function SessionPage() {
               <Wifi className="w-4 h-4 text-[#9CA3AF]" />
               <span className="text-sm text-[#9CA3AF]">Connected</span>
             </div>
+            
+            {isHost && (
+              <div className="relative" ref={menuDropdownRef}>
+                <button
+                  onClick={() => setShowMenuDropdown(!showMenuDropdown)}
+                  className="px-3 py-2 hover:bg-[#2A2A2A] rounded-lg transition-colors"
+                  title="More options"
+                >
+                  <MoreVertical className="w-5 h-5 text-[#9CA3AF]" />
+                </button>
+                
+                {showMenuDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg shadow-lg z-50">
+                    <button
+                      onClick={endSession}
+                      className="w-full px-4 py-2 text-left text-[#EF4444] hover:bg-[#2A2A2A] flex items-center gap-2 rounded-t-lg transition-colors"
+                    >
+                      <Power className="w-4 h-4" />
+                      End Session
+                    </button>
+                    <button
+                      onClick={transferHost}
+                      className="w-full px-4 py-2 text-left text-[#8B5CF6] hover:bg-[#2A2A2A] flex items-center gap-2 transition-colors"
+                    >
+                      <Crown className="w-4 h-4" />
+                      Transfer Host
+                    </button>
+                    <button
+                      onClick={resetSession}
+                      className="w-full px-4 py-2 text-left text-[#F59E0B] hover:bg-[#2A2A2A] flex items-center gap-2 rounded-b-lg transition-colors"
+                    >
+                      <RotateCw className="w-4 h-4" />
+                      Reset Session
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <button
               onClick={leaveSession}
               className="px-4 py-2 border border-[#EF4444] text-[#EF4444] hover:bg-[#EF4444] hover:text-white rounded-lg transition-colors flex items-center gap-2"

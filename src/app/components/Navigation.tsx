@@ -1,10 +1,19 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { LogIn } from 'lucide-react';
+import { LogIn, Search, Clock } from 'lucide-react';
 
 export default function Navigation() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [quickJoinSlug, setQuickJoinSlug] = useState('');
+
+  const isActive = (path: string) => {
+    return location.pathname === path;
+  };
+
+  const isPartyActive = () => {
+    return location.pathname.startsWith('/party/');
+  };
 
   const handleQuickJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,29 +28,53 @@ export default function Navigation() {
     navigate(`/party/${slug}`);
   };
 
+  const navLinkClass = (path: string) => {
+    const baseClass = "transition-colors";
+    return isActive(path)
+      ? `${baseClass} text-white border-b-2 border-[#06B6D4] pb-1`
+      : `${baseClass} text-[#9CA3AF] hover:text-white`;
+  };
+
   return (
     <nav className="relative z-10 flex flex-wrap items-center justify-between px-4 lg:px-8 py-6 max-w-7xl mx-auto gap-4">
-      <Link to="/" className="flex items-center gap-2">
+      <Link to="/" className="flex items-center gap-2 flex-shrink-0">
         <div className="w-8 h-8 bg-gradient-to-br from-[#8B5CF6] to-[#06B6D4] rounded-lg"></div>
         <span className="text-xl font-bold">Tagthr</span>
       </Link>
 
-      <div className="flex items-center gap-6 flex-wrap">
-        <Link to="/" className="text-[#9CA3AF] hover:text-white transition-colors">
+      <div className="flex items-center gap-8 flex-wrap flex-1 justify-center md:justify-start md:flex-1">
+        <Link to="/" className={navLinkClass('/')}>
           Home
+        </Link>
+        <Link to="/recent" className={navLinkClass('/recent')}>
+          Recent
         </Link>
         <button
           onClick={createParty}
-          className="text-[#9CA3AF] hover:text-white transition-colors"
+          className={`transition-colors ${
+            isPartyActive()
+              ? 'text-white border-b-2 border-[#06B6D4] pb-1'
+              : 'text-[#9CA3AF] hover:text-white'
+          }`}
         >
-          Create Party
+          Party
         </button>
-        <Link to="/about" className="text-[#9CA3AF] hover:text-white transition-colors">
+        <Link to="/about" className={navLinkClass('/about')}>
           About
         </Link>
-        <Link to="/legal" className="text-[#9CA3AF] hover:text-white transition-colors">
+        <Link to="/legal" className={navLinkClass('/legal')}>
           Legal
         </Link>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate('/search')}
+          className="p-2 text-[#9CA3AF] hover:text-white hover:bg-[#1A1A1A] rounded-lg transition-colors"
+          title="Search"
+        >
+          <Search className="w-5 h-5" />
+        </button>
 
         <form onSubmit={handleQuickJoin} className="flex gap-2">
           <input

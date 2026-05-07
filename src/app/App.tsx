@@ -4,6 +4,8 @@ import LandingPage from './components/LandingPage';
 import SessionPage from './components/SessionPage';
 import AboutPage from './components/AboutPage';
 import LegalPage from './components/LegalPage';
+import RecentParties from './components/RecentParties';
+import SearchPage from './components/SearchPage';
 import { useAuth } from '../hooks/useAuth';
 
 export default function App() {
@@ -25,6 +27,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/party/:slug" element={<SessionPage />} />
+        <Route path="/recent" element={<RecentParties />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/legal" element={<LegalPage />} />
       </Routes>

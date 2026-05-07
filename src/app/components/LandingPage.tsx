@@ -8,6 +8,7 @@ import MediaDetailModal from './MediaDetailModal';
 import RecentParties from './RecentParties';
 import { MediaItem, SearchResponse } from '../../types/media';
 import { useSessionLimit } from '../../hooks/useSessionLimit';
+import { sessionOperations, participantOperations, getParticipantToken } from '../../lib/supabaseClient';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -32,7 +33,24 @@ export default function LandingPage() {
     }
 
     const slug = generateSlug();
-    navigate(`/party/${slug}`);
+    const token = getParticipantToken();
+
+    if (!token) {
+      console.error('No participant token found');
+      return;
+    }
+
+    try {
+      // Create session in database
+      const session = await sessionOperations.createSession(slug, token);
+      
+      // Join as host
+      await participantOperations.joinSession(token, session.id, 'host');
+
+      navigate(`/party/${slug}`);
+    } catch (error) {
+      console.error('Error creating party:', error);
+    }
   };
 
   const createPrivateParty = async () => {
@@ -48,7 +66,27 @@ export default function LandingPage() {
     }
 
     const slug = generateSlug();
-    navigate(`/party/${slug}?pin=${pin}`);
+    const token = getParticipantToken();
+
+    if (!token) {
+      console.error('No participant token found');
+      return;
+    }
+
+    try {
+      // Hash the PIN (simple hash - in production use bcrypt)
+      const pinHash = btoa(pin); // Base64 encode for now
+
+      // Create session in database with PIN
+      const session = await sessionOperations.createSession(slug, token, undefined, pinHash);
+      
+      // Join as host
+      await participantOperations.joinSession(token, session.id, 'host');
+
+      navigate(`/party/${slug}?pin=${pin}`);
+    } catch (error) {
+      console.error('Error creating private party:', error);
+    }
   };
 
   const joinRoom = () => {
@@ -135,7 +173,32 @@ export default function LandingPage() {
     }
 
     const slug = generateSlug();
-    navigate(`/party/${slug}`, { state: { media } });
+    const token = getParticipantToken();
+
+    if (!token) {
+      console.error('No participant token found');
+      return;
+    }
+
+    try {
+      // Create session with media metadata
+      const metadata = {
+        title: media.title,
+        poster: media.poster,
+        year: media.year,
+        rating: media.rating,
+        imdbId: media.imdbId,
+      };
+
+      const session = await sessionOperations.createSession(slug, token, undefined, undefined, metadata);
+      
+      // Join as host
+      await participantOperations.joinSession(token, session.id, 'host');
+
+      navigate(`/party/${slug}`, { state: { media } });
+    } catch (error) {
+      console.error('Error creating party:', error);
+    }
   };
 
   return (
