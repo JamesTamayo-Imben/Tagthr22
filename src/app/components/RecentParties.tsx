@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, Session, getParticipantToken, sessionOperations, participantOperations } from '../../lib/supabaseClient';
 import { Clock, Crown, Users, Play, Lock, MoreVertical, Power, RotateCw } from 'lucide-react';
-import Navigation from './Navigation';
 
 interface RecentSession extends Session {
   role: 'host' | 'member';
@@ -90,50 +89,71 @@ export default function RecentParties() {
     try {
       await sessionOperations.updateSession(sessionId, { is_active: false });
       // Refresh the list
-      fetchRecentSessions();
+      await fetchRecentSessions();
       setOpenMenuId(null);
+      alert('Session ended successfully');
     } catch (err) {
       console.error('Error ending session:', err);
+      alert('Failed to end session');
     }
   };
 
-  const handleTransferHost = (session: RecentSession) => {
+  const handleTransferHost = async (session: RecentSession) => {
     if (session.role === 'host') {
-      // In a real implementation, you'd open a dialog to select who to transfer to
-      console.log('Transfer host for session:', session.id);
-      // For now, just show a message
-      alert('Transfer host feature coming soon!');
-      setOpenMenuId(null);
+      try {
+        // Get all participants in this session
+        const participants = await participantOperations.getSessionParticipants(session.id);
+        if (participants && participants.length > 1) {
+          // Find first non-host participant
+          const token = getParticipantToken();
+          const newHost = participants.find(p => p.participant_token !== token);
+          if (newHost) {
+            // Transfer host to the new participant
+            await sessionOperations.updateSession(session.id, { 
+              host_token: newHost.participant_token 
+            });
+            await fetchRecentSessions();
+            setOpenMenuId(null);
+            alert('Host transferred successfully');
+          } else {
+            alert('No other participants to transfer host to');
+          }
+        } else {
+          alert('No other participants in this session');
+        }
+      } catch (err) {
+        console.error('Error transferring host:', err);
+        alert('Failed to transfer host');
+      }
     }
   };
 
   const handleResetSession = async (sessionId: number) => {
     try {
-      // Reset session by clearing participants and video
+      // Reset session by clearing video and metadata
       await sessionOperations.updateSession(sessionId, { 
         video_url: null,
         metadata: null
       });
       // Refresh the list
-      fetchRecentSessions();
+      await fetchRecentSessions();
       setOpenMenuId(null);
+      alert('Session reset successfully');
     } catch (err) {
       console.error('Error resetting session:', err);
+      alert('Failed to reset session');
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
-      <Navigation />
-
-      <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12">
-        <div className="mb-12">
-          <div className="flex items-center gap-3 mb-2">
-            <Clock className="w-8 h-8 text-[#06B6D4]" />
-            <h1 className="text-4xl font-bold">Recent Parties</h1>
-          </div>
-          <p className="text-[#9CA3AF] ml-11">Join your previous watch parties or create a new one</p>
+    <div className="space-y-8 pt-8">
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <Clock className="w-6 h-6 text-[#06B6D4]" />
+          <h2 className="text-2xl font-bold">Recent Parties</h2>
         </div>
+        <p className="text-[#9CA3AF]">Join your previous watch parties</p>
+      </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -180,9 +200,62 @@ export default function RecentParties() {
                       <span>Room: <code className="bg-[#0A0A0A] px-2 py-1 rounded text-xs">{session.slug}</code></span>
                     </div>
                   </div>
-                  {session.role === 'host' && (
-                    <Crown className="w-5 h-5 text-[#F59E0B] flex-shrink-0 ml-2" />
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    {session.role === 'host' && (
+                      <Crown className="w-5 h-5 text-[#F59E0B]" />
+                    )}
+                    <div className="relative">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuId(openMenuId === session.id ? null : session.id);
+                        }}
+                        className="p-1 hover:bg-[#2A2A2A] rounded transition-colors"
+                        title="More options"
+                      >
+                        <MoreVertical className="w-5 h-5 text-[#9CA3AF] hover:text-white" />
+                      </button>
+                      
+                      {openMenuId === session.id && (
+                        <div className="absolute right-0 mt-2 w-48 bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg shadow-lg z-50">
+                          {session.role === 'host' && (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTransferHost(session);
+                                }}
+                                className="w-full px-4 py-2 text-left text-[#8B5CF6] hover:bg-[#2A2A2A] flex items-center gap-2 transition-colors"
+                              >
+                                <Crown className="w-4 h-4" />
+                                Transfer Host
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleResetSession(session.id);
+                                }}
+                                className="w-full px-4 py-2 text-left text-[#F59E0B] hover:bg-[#2A2A2A] flex items-center gap-2 transition-colors"
+                              >
+                                <RotateCw className="w-4 h-4" />
+                                Reset Session
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEndSession(session.id);
+                            }}
+                            className={`w-full px-4 py-2 text-left text-[#EF4444] hover:bg-[#2A2A2A] flex items-center gap-2 transition-colors ${session.role === 'host' ? 'rounded-b-lg' : 'rounded-lg'}`}
+                          >
+                            <Power className="w-4 h-4" />
+                            End Session
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {session.metadata?.year && (
@@ -217,7 +290,6 @@ export default function RecentParties() {
             ))}
           </div>
         )}
-      </div>
     </div>
   );
 }

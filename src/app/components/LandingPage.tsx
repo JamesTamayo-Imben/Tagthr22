@@ -45,7 +45,7 @@ export default function LandingPage() {
       const session = await sessionOperations.createSession(slug, token);
       
       // Join as host
-      await participantOperations.joinSession(token, session.id, 'host');
+      await participantOperations.joinSession(session.id, token, 'host');
 
       navigate(`/party/${slug}`);
     } catch (error) {
@@ -81,7 +81,7 @@ export default function LandingPage() {
       const session = await sessionOperations.createSession(slug, token, undefined, pinHash);
       
       // Join as host
-      await participantOperations.joinSession(token, session.id, 'host');
+      await participantOperations.joinSession(session.id, token, 'host');
 
       navigate(`/party/${slug}?pin=${pin}`);
     } catch (error) {
@@ -190,10 +190,16 @@ export default function LandingPage() {
         imdbId: media.imdbId,
       };
 
-      const session = await sessionOperations.createSession(slug, token, undefined, undefined, metadata);
+      const session = await sessionOperations.createSession(
+        slug,
+        token,
+        media.poster, // Use poster as video_url for display
+        undefined,
+        metadata
+      );
       
       // Join as host
-      await participantOperations.joinSession(token, session.id, 'host');
+      await participantOperations.joinSession(session.id, token, 'host');
 
       navigate(`/party/${slug}`, { state: { media } });
     } catch (error) {

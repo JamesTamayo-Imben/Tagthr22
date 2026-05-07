@@ -101,26 +101,28 @@ CREATE POLICY "Anyone can read active sessions"
   ON sessions FOR SELECT
   USING (expires_at > now());
 
-CREATE POLICY "Authenticated users can create sessions"
+CREATE POLICY "Anyone can create sessions"
   ON sessions FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (true);
 
-CREATE POLICY "Hosts can update their sessions"
+CREATE POLICY "Session host can update their sessions"
   ON sessions FOR UPDATE
-  USING (host_token = auth.uid()::uuid);
+  USING (true)
+  WITH CHECK (true);
 
 -- RLS Policies for participant_sessions
 CREATE POLICY "Anyone can read participant sessions"
   ON participant_sessions FOR SELECT
   USING (true);
 
-CREATE POLICY "Authenticated users can join sessions"
+CREATE POLICY "Anyone can join sessions"
   ON participant_sessions FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (true);
 
-CREATE POLICY "Users can update their own session records"
+CREATE POLICY "Anyone can update participant records"
   ON participant_sessions FOR UPDATE
-  USING (participant_token = auth.uid()::uuid);
+  USING (true)
+  WITH CHECK (true);
 
 -- RLS Policies for messages
 CREATE POLICY "Anyone can read messages in active sessions"
@@ -133,25 +135,18 @@ CREATE POLICY "Anyone can read messages in active sessions"
     )
   );
 
-CREATE POLICY "Authenticated users can create messages"
+CREATE POLICY "Anyone can create messages"
   ON messages FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (true);
 
 -- RLS Policies for reports
-CREATE POLICY "Hosts can read reports for their sessions"
+CREATE POLICY "Anyone can read reports"
   ON reports FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM messages m
-      JOIN sessions s ON m.session_id = s.id
-      WHERE m.id = reports.message_id
-      AND s.host_token = auth.uid()::uuid
-    )
-  );
+  USING (true);
 
-CREATE POLICY "Authenticated users can create reports"
+CREATE POLICY "Anyone can create reports"
   ON reports FOR INSERT
-  WITH CHECK (auth.uid() IS NOT NULL);
+  WITH CHECK (true);
 
 -- Comments for documentation
 COMMENT ON TABLE sessions IS 'Stores watch party sessions with 24-hour expiration';

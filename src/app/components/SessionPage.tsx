@@ -66,6 +66,7 @@ export default function SessionPage() {
   const pin = searchParams.get('pin');
   const mediaFromState = location.state?.media;
   const playerRef = useRef<VideoPlayerHandle>(null);
+  const videoRef = playerRef; // Alias for compatibility
 
   const [isHost, setIsHost] = useState(true);
   const [videoUrl, setVideoUrl] = useState('');
@@ -79,16 +80,9 @@ export default function SessionPage() {
   const [loading, setLoading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
 
-  const [participants, setParticipants] = useState<Participant[]>([
-    { id: '1', name: 'Anonymous#1234', isHost: true, isOnline: true, lastSeen: new Date() },
-    { id: '2', name: 'Anonymous#5678', isHost: false, isOnline: true, lastSeen: new Date() },
-    { id: '3', name: 'Anonymous#9012', isHost: false, isOnline: true, lastSeen: new Date() },
-  ]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { id: '1', user: 'Anonymous#1234', message: 'Hey everyone!', timestamp: new Date() },
-    { id: '2', user: 'Anonymous#5678', message: 'Ready to watch!', timestamp: new Date() },
-  ]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   // Supabase state
   const [session, setSession] = useState<Session | null>(null);
@@ -127,6 +121,27 @@ export default function SessionPage() {
         setSession(sessionData);
         setSessionId(sessionData.id);
 
+        // Set video URL and media info from database or state
+        if (sessionData.video_url) {
+          setVideoUrl(sessionData.video_url);
+        }
+        if (sessionData.metadata && sessionData.metadata.title) {
+          setMediaInfo({
+            title: sessionData.metadata.title,
+            year: sessionData.metadata.year || '',
+            poster: sessionData.metadata.poster || '',
+            rating: sessionData.metadata.rating,
+            type: (sessionData.metadata.type as 'movie' | 'series') || 'movie',
+            imdbId: sessionData.metadata.imdbId,
+          });
+        } else if (mediaFromState) {
+          // Fallback to state if not in DB yet
+          setMediaInfo(mediaFromState);
+          if (mediaFromState.poster) {
+            setVideoUrl(mediaFromState.poster);
+          }
+        }
+
         // Determine if current user is host
         const isUserHost = sessionData.host_token === token;
         setIsHost(isUserHost);
@@ -141,7 +156,7 @@ export default function SessionPage() {
             existingMessages.map((msg: any) => ({
               id: msg.id.toString(),
               user: msg.participant_token.slice(0, 4).toUpperCase(),
-              message: msg.content,
+              message: msg.body,
               timestamp: new Date(msg.created_at),
             }))
           );
@@ -170,7 +185,7 @@ export default function SessionPage() {
               {
                 id: newMessage.id.toString(),
                 user: newMessage.participant_token.slice(0, 4).toUpperCase(),
-                message: newMessage.content,
+                message: newMessage.body,
                 timestamp: new Date(newMessage.created_at),
               },
             ]);
@@ -287,11 +302,27 @@ export default function SessionPage() {
     }
   };
 
-  const updateVideoUrl = () => {
-    if (newVideoUrl.trim()) {
+  const updateVideoUrl = async () => {
+    if (!newVideoUrl.trim()) return;
+
+    try {
+      // Update local state
       setVideoUrl(newVideoUrl);
       setNewVideoUrl('');
       setMediaInfo(null);
+
+      // ✅ CRITICAL: Save to Supabase database
+      if (sessionId && isHost) {
+        await sessionOperations.updateSession(sessionId, {
+          video_url: newVideoUrl,
+          metadata: {}, // Keep existing metadata
+        });
+        console.log('✅ Video URL saved to Supabase:', newVideoUrl);
+      }
+    } catch (err) {
+      console.error('❌ Error updating video URL:', err);
+      // Show error to user
+      alert('Failed to update video URL. Please try again.');
     }
   };
 
@@ -321,33 +352,51 @@ export default function SessionPage() {
     }
   };
 
-  const transferHost = () => {
-    if (participants.length > 1) {
+  const transferHost = async () => {
+    if (participants.length > 1 && sessionId && isHost) {
       const nonHostParticipants = participants.filter(p => !p.isHost);
       if (nonHostParticipants.length > 0) {
-        // In a real implementation, you'd open a dialog to select who to transfer to
-        const newHost = nonHostParticipants[0];
-        setParticipants(prev => prev.map(p => ({
-          ...p,
-          isHost: p.id === newHost.id
-        })));
-        setIsHost(false);
-        setShowMenuDropdown(false);
-        // TODO: Persist this to database
+        try {
+          const newHostToken = nonHostParticipants[0].id;
+          // Update session with new host token
+          await sessionOperations.updateSession(sessionId, { host_token: newHostToken });
+          // Update local state
+          setParticipants(prev => prev.map(p => ({
+            ...p,
+            isHost: p.id === newHostToken
+          })));
+          setIsHost(false);
+          setShowMenuDropdown(false);
+          alert('Host transferred successfully!');
+        } catch (err) {
+          console.error('Error transferring host:', err);
+          alert('Failed to transfer host');
+        }
       }
     }
   };
 
-  const resetSession = () => {
-    // Clear all participants except host and reset video
-    setParticipants(prev => prev.filter(p => p.isHost));
-    setVideoUrl('');
-    setNewVideoUrl('');
-    setMediaInfo(null);
-    setSearchResults([]);
-    setChatMessages([]);
-    setShowMenuDropdown(false);
-    // TODO: Persist these changes to database
+  const resetSession = async () => {
+    if (sessionId && isHost) {
+      try {
+        // Clear video URL and metadata
+        await sessionOperations.updateSession(sessionId, { 
+          video_url: null,
+          metadata: null
+        });
+        // Update local state
+        setVideoUrl('');
+        setNewVideoUrl('');
+        setMediaInfo(null);
+        setSearchResults([]);
+        setChatMessages([]);
+        setShowMenuDropdown(false);
+        alert('Session reset successfully!');
+      } catch (err) {
+        console.error('Error resetting session:', err);
+        alert('Failed to reset session');
+      }
+    }
   };
 
   const debounce = <T extends (...args: any[]) => void>(func: T, delay: number) => {
@@ -427,6 +476,20 @@ export default function SessionPage() {
     setSearchResults([]);
     setSelectedMedia(null);
     setVideoUrl('');
+
+    // Persist media metadata to database
+    if (sessionId && isHost) {
+      sessionOperations.updateSession(sessionId, {
+        metadata: {
+          title: media.title,
+          year: media.year,
+          poster: media.poster,
+          rating: media.rating,
+          imdbId: media.imdbId,
+        },
+        video_url: media.poster, // Use poster as video URL for display
+      }).catch((err) => console.error('Error updating session metadata:', err));
+    }
   };
 
   const handlePlaybackChange = async (state: { playing: boolean; time: number }) => {

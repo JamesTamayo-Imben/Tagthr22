@@ -155,14 +155,15 @@ export const sessionOperations = {
 export const participantOperations = {
   // Join a session
   async joinSession(
-    participantToken: string,
     sessionId: number,
+    participantToken: string,
     role: 'host' | 'member' = 'member'
   ) {
     // First, create or update participant record
     await supabase
       .from('participants')
-      .upsert({ token: participantToken, last_seen: new Date().toISOString() });
+      .upsert({ token: participantToken, last_seen: new Date().toISOString() }, 
+        { onConflict: 'token' });
 
     // Then add to participant_sessions
     const { data, error } = await supabase
