@@ -92,7 +92,40 @@ export default function SessionPage() {
   const messagesSubscriptionRef = useRef<RealtimeChannel | null>(null);
   const participantsSubscriptionRef = useRef<RealtimeChannel | null>(null);
   const playbackSubscriptionRef = useRef<RealtimeChannel | null>(null);
+  const firstPlaybackSyncRef = useRef<boolean>(false); // Track if first sync has occurred
+  const lastPlaybackStateRef = useRef<{playing: boolean; currentTime: number; duration: number} | null>(null); // Store last playback state
   const menuDropdownRef = useRef<HTMLDivElement>(null);
+  const currentTimeRef = useRef<number>(0); // Track current playback time locally
+
+  // Auto-play video when participant joins from recent parties and sync to host position
+  useEffect(() => {
+    if (videoUrl && !isHost && playerRef.current) {
+      // Reset first sync flag when video URL changes
+      firstPlaybackSyncRef.current = false;
+      
+      // Small delay to ensure player is fully loaded
+      const timer = setTimeout(() => {
+        // If we have a last known playback state, sync to it
+        if (lastPlaybackStateRef.current) {
+          console.log('🔄 Syncing participant to last known state:', lastPlaybackStateRef.current.currentTime);
+          playerRef.current?.seekTo(lastPlaybackStateRef.current.currentTime);
+          currentTimeRef.current = lastPlaybackStateRef.current.currentTime;
+          
+          if (lastPlaybackStateRef.current.playing) {
+            playerRef.current?.play().catch((err: any) => {
+              console.warn('Auto-play blocked:', err);
+            });
+          }
+        } else {
+          // No previous state, just try to auto-play
+          playerRef.current?.play().catch((err: any) => {
+            console.log('Auto-play request (may be blocked by browser policy):', err);
+          });
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [videoUrl, isHost]);
 
   useEffect(() => {
     const heartbeatInterval = setInterval(() => {
@@ -131,7 +164,7 @@ export default function SessionPage() {
             year: sessionData.metadata.year || '',
             poster: sessionData.metadata.poster || '',
             rating: sessionData.metadata.rating,
-            type: (sessionData.metadata.type as 'movie' | 'series') || 'movie',
+            type: 'movie', // Default type since metadata doesn't store this
             imdbId: sessionData.metadata.imdbId,
           });
         } else if (mediaFromState) {
@@ -196,16 +229,21 @@ export default function SessionPage() {
         // Setup realtime subscription for participants
         const participantsChannel = realtimeOperations.subscribeToParticipants(
           sessionData.id,
-          (participants: any[]) => {
-            setParticipants(
-              participants.map((p: any) => ({
-                id: p.participant_token,
-                name: `Anonymous#${p.participant_token.slice(0, 4).toUpperCase()}`,
-                isHost: p.participant_token === sessionData.host_token,
-                isOnline: true,
-                lastSeen: new Date(p.last_visited),
-              }))
-            );
+          (participant: any, event: 'INSERT' | 'DELETE') => {
+            // Reload participants list when someone joins or leaves
+            participantOperations.getSessionParticipants(sessionData.id).then((dbParticipants) => {
+              if (dbParticipants && dbParticipants.length > 0) {
+                setParticipants(
+                  dbParticipants.map((p: any) => ({
+                    id: p.participant_token,
+                    name: `Anonymous#${p.participant_token.slice(0, 4).toUpperCase()}`,
+                    isHost: p.participant_token === sessionData.host_token,
+                    isOnline: true,
+                    lastSeen: new Date(p.last_visited_at),
+                  }))
+                );
+              }
+            });
           }
         );
         participantsSubscriptionRef.current = participantsChannel;
@@ -213,17 +251,30 @@ export default function SessionPage() {
         // Setup playback sync subscription (non-hosts listen for playback state from host)
         if (!isUserHost) {
           const playbackChannel = realtimeOperations.subscribeToPlayback(
-            sessionData.id,
+            sessionData.id.toString(),
             (playbackState: any) => {
+              // Store the last playback state for late joiners
+              lastPlaybackStateRef.current = playbackState;
+              
               // Update video player position and play state
               if (videoRef.current) {
-                if (playbackState.is_playing) {
-                  videoRef.current.play();
+                if (playbackState.playing) {
+                  // Ensure auto-play when host is playing
+                  console.log('🎬 Host is playing, auto-playing participant video');
+                  videoRef.current.play().catch((err: any) => {
+                    console.warn('Auto-play blocked:', err);
+                  });
                 } else {
                   videoRef.current.pause();
                 }
-                if (Math.abs(videoRef.current.currentTime - playbackState.current_time) > 1) {
-                  videoRef.current.seekTo(playbackState.current_time);
+                
+                // For first sync or significant time differences, sync to host position
+                const timeDiff = Math.abs(currentTimeRef.current - playbackState.currentTime);
+                if (!firstPlaybackSyncRef.current || timeDiff > 0.5) {
+                  videoRef.current.seekTo(playbackState.currentTime);
+                  currentTimeRef.current = playbackState.currentTime;
+                  console.log('✅ Participant synced to:', playbackState.currentTime);
+                  firstPlaybackSyncRef.current = true; // Mark first sync as done
                 }
               }
             }
@@ -285,7 +336,9 @@ export default function SessionPage() {
   const kickParticipant = async (id: string) => {
     try {
       // Remove participant from database
-      await participantOperations.leaveSession(id);
+      if (sessionId) {
+        await participantOperations.leaveSession(id, sessionId);
+      }
       // Update UI
       setParticipants(participants.filter((p) => p.id !== id));
       setChatMessages([
@@ -329,8 +382,8 @@ export default function SessionPage() {
   const leaveSession = async () => {
     try {
       // Leave session in database
-      if (participantToken) {
-        await participantOperations.leaveSession(participantToken);
+      if (participantToken && sessionId) {
+        await participantOperations.leaveSession(participantToken, sessionId);
       }
     } catch (err) {
       console.error('Error leaving session:', err);
@@ -342,8 +395,9 @@ export default function SessionPage() {
   const endSession = async () => {
     try {
       // End the session and close for all participants
-      if (sessionId) {
-        await sessionOperations.updateSession(sessionId, { is_active: false });
+      if (sessionId && participantToken) {
+        // Leave the session yourself first
+        await participantOperations.leaveSession(participantToken, sessionId);
       }
       setShowMenuDropdown(false);
       navigate('/');
@@ -399,13 +453,31 @@ export default function SessionPage() {
     }
   };
 
-  const debounce = <T extends (...args: any[]) => void>(func: T, delay: number) => {
+  // Broadcast seek position to all participants (debounced)
+  const broadcastPlaybackSeek = useCallback(async (seekTime: number) => {
+    if (!isHost || !sessionId) return;
+    try {
+      await realtimeOperations.broadcastPlaybackState(sessionId.toString(), {
+        playing: true,
+        currentTime: seekTime,
+        duration: 0,
+      });
+      console.log('✅ Broadcasted seek position:', seekTime);
+    } catch (err) {
+      console.error('Error broadcasting seek:', err);
+    }
+  }, [isHost, sessionId]);
+
+  // Create debounced version of broadcastPlaybackSeek
+  const debouncedSeekRef = useRef<(time: number) => void | null>(null);
+  useEffect(() => {
     let timeoutId: NodeJS.Timeout;
-    return (...args: Parameters<T>) => {
+    debouncedSeekRef.current = (time: number) => {
       clearTimeout(timeoutId);
-      timeoutId = setTimeout(() => func(...args), delay);
+      timeoutId = setTimeout(() => broadcastPlaybackSeek(time), 300);
     };
-  };
+    return () => clearTimeout(timeoutId);
+  }, [broadcastPlaybackSeek]);
 
   const searchMedia = async (query: string) => {
     if (!query.trim()) {
@@ -451,7 +523,16 @@ export default function SessionPage() {
     }
   };
 
-  const debouncedSearch = useCallback(debounce(searchMedia, 500), []);
+  const debouncedSearch = useCallback(
+    (func: (q: string) => Promise<void>, delay: number) => {
+      let timeoutId: NodeJS.Timeout;
+      return (query: string) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(query), delay);
+      };
+    },
+    []
+  )(searchMedia, 500);
 
   const handleSearch = (query: string) => {
     if (!query.trim()) {
@@ -495,8 +576,9 @@ export default function SessionPage() {
   const handlePlaybackChange = async (state: { playing: boolean; time: number }) => {
     if (isHost && sessionId && videoRef.current) {
       try {
-        // Get current video duration
-        const duration = await videoRef.current.getCurrentTime(); // This gets current time, we'll use a default duration
+        // Track current time locally
+        currentTimeRef.current = state.time;
+        
         // Broadcast playback state to all participants
         await realtimeOperations.broadcastPlaybackState(sessionId.toString(), {
           playing: state.playing,
@@ -600,6 +682,7 @@ export default function SessionPage() {
                   ref={playerRef}
                   url={videoUrl}
                   onStateChange={handlePlaybackChange}
+                  onSeek={debouncedSeekRef.current ? (time) => debouncedSeekRef.current!(time) : undefined}
                   isHost={isHost}
                 />
               ) : (

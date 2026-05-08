@@ -16,7 +16,9 @@ declare global {
 interface VideoPlayerProps {
   url: string;
   onStateChange?: (state: { playing: boolean; time: number }) => void;
+  onSeek?: (time: number) => void;
   isHost?: boolean;
+  onVolumeChange?: (volume: number) => void;
 }
 
 export interface VideoPlayerHandle {
@@ -27,11 +29,12 @@ export interface VideoPlayerHandle {
 }
 
 const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
-  ({ url, onStateChange, isHost = false }, ref) => {
+  ({ url, onStateChange, onSeek, isHost = false, onVolumeChange }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<any>(null);
     const platformRef = useRef<'youtube' | 'vimeo' | 'direct' | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const lastSeekTimeRef = useRef<number>(0);
 
     useImperativeHandle(ref, () => ({
       play: () => {
@@ -179,7 +182,10 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             controls: isHost ? 1 : 0,
             disablekb: isHost ? 0 : 1,
             modestbranding: 1,
-            rel: 0
+            rel: 0,
+            fs: 1, // Allow fullscreen for both host and participants
+            iv_load_policy: 3, // Hide video annotations
+            autoplay: 0 // Don't auto-play initially
           },
           events: {
             onReady: () => {
@@ -198,9 +204,20 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
               setError(errorMessages[event.data] || 'YouTube player error. Please check the video URL.');
             },
             onStateChange: (event: any) => {
-              if (!isHost) return;
               const playing = event.data === window.YT.PlayerState.PLAYING;
               const time = playerRef.current?.getCurrentTime() || 0;
+              
+              // Detect seeking: when user changes position significantly
+              const seekDifference = Math.abs(time - lastSeekTimeRef.current);
+              if (seekDifference > 0.5) {
+                lastSeekTimeRef.current = time;
+                // Only trigger onSeek for actual seeks, not natural playback
+                if (onSeek && playing === true && isHost) {
+                  console.log('🎬 Host seeking to:', time);
+                  onSeek(time);
+                }
+              }
+              
               onStateChange?.({ playing, time });
             }
           }
@@ -259,7 +276,22 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
 
       containerRef.current.innerHTML = '';
       const iframe = document.createElement('iframe');
-      iframe.src = `https://player.vimeo.com/video/${videoId}`;
+      // Build Vimeo URL with appropriate parameters
+      const vimeoUrl = new URL(`https://player.vimeo.com/video/${videoId}`);
+      
+      // For participants: hide controls and show only fullscreen
+      if (!isHost) {
+        vimeoUrl.searchParams.set('h', videoId);
+        vimeoUrl.searchParams.set('controls', '0');
+        vimeoUrl.searchParams.set('title', '0');
+        vimeoUrl.searchParams.set('byline', '0');
+        vimeoUrl.searchParams.set('portrait', '0');
+        vimeoUrl.searchParams.set('badge', '0');
+        vimeoUrl.searchParams.set('autopause', '1');
+        vimeoUrl.searchParams.set('autoplay', '1');
+      }
+      
+      iframe.src = vimeoUrl.toString();
       iframe.width = '100%';
       iframe.height = '100%';
       iframe.frameBorder = '0';
@@ -289,10 +321,28 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
               onStateChange?.({ playing: false, time });
             });
 
-            playerRef.current.on('seeked', async () => {
+            // Track seeking for Vimeo (only on actual seek events)
+            playerRef.current.on('seeking', async () => {
               const time = await playerRef.current.getCurrentTime();
-              const paused = await playerRef.current.getPaused();
-              onStateChange?.({ playing: !paused, time });
+              console.log('🎬 Host seeking to:', time);
+              onSeek?.(time);
+            });
+
+            // Track volume changes
+            playerRef.current.on('volumechange', async () => {
+              const volume = await playerRef.current.getVolume();
+              onVolumeChange?.(volume);
+            });
+          } else {
+            // Participant: listen to play/pause but not seek controls
+            playerRef.current.on('play', async () => {
+              const time = await playerRef.current.getCurrentTime();
+              onStateChange?.({ playing: true, time });
+            });
+
+            playerRef.current.on('pause', async () => {
+              const time = await playerRef.current.getCurrentTime();
+              onStateChange?.({ playing: false, time });
             });
           }
         } catch (err) {
@@ -318,7 +368,37 @@ const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
       );
     }
 
-    return <div ref={containerRef} className="w-full h-full bg-black" />;
+    return (
+      <div className="relative w-full h-full bg-black">
+        <div ref={containerRef} className="w-full h-full bg-black" />
+        {/* Overlay to block participant controls */}
+        {!isHost && (
+          <div
+            className="absolute inset-0 z-10"
+            style={{
+              cursor: 'default',
+              pointerEvents: 'auto',
+              // Transparent but blocks clicks
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+            onMouseDown={(e) => {
+              // Prevent any mouse interaction
+              if (!isHost) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+            onDoubleClick={(e) => {
+              // Prevent double-click to play/pause
+              if (!isHost) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+          />
+        )}
+      </div>
+    );
   }
 );
 

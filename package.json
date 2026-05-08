@@ -1,9 +1,12 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "Tagthr",
   "private": true,
   "version": "0.0.1",
+  "homepage": "https://JamesTamayo-Imben.github.io/Tagthr22",
   "type": "module",
   "scripts": {
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
     "build": "vite build",
     "dev": "vite"
   },
@@ -72,6 +75,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "4.7.0",
+    "gh-pages": "^6.3.0",
     "tailwindcss": "4.1.12",
     "typescript": "^6.0.3",
     "vite": "6.3.5"
