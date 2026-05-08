@@ -5,10 +5,10 @@
   "homepage": "https://JamesTamayo-Imben.github.io/Tagthr22",
   "type": "module",
   "scripts": {
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d build",
+    "dev": "vite",
     "build": "vite build",
-    "dev": "vite"
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
