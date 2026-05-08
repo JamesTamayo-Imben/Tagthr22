@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { useEffect } from 'react';
 import LandingPage from './components/LandingPage';
 import SessionPage from './components/SessionPage';
@@ -23,7 +23,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter basename="/Tagthr22">
+    <HashRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/party/:slug" element={<SessionPage />} />
@@ -32,6 +32,6 @@ export default function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/legal" element={<LegalPage />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
