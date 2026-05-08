@@ -23,7 +23,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/Tagthr22">
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/party/:slug" element={<SessionPage />} />
