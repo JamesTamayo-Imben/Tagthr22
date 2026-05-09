@@ -595,10 +595,10 @@ export default function SessionPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       <Navigation />
 
-      <div className="bg-[#1A1A1A] border-b border-[#2A2A2A] px-4 lg:px-8 py-4">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-[#1A1A1A] border-b border-[#2A2A2A] px-4 lg:px-8 pt-24 pb-4">
+        <div className="max-w-7xl mx-auto flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <span className="text-[#9CA3AF]">Room:</span>
               <code className="px-3 py-1 bg-[#0A0A0A] rounded-lg">{slug}</code>
               <button
@@ -617,7 +617,7 @@ export default function SessionPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${heartbeatStatus === 'green' ? 'bg-[#10B981]' : heartbeatStatus === 'yellow' ? 'bg-[#F59E0B]' : 'bg-[#EF4444]'} animate-pulse`}></div>
               <Wifi className="w-4 h-4 text-[#9CA3AF]" />
@@ -674,7 +674,7 @@ export default function SessionPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
-        <div className="grid lg:grid-cols-[1fr_400px] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,400px)] gap-6">
           <div className="space-y-6">
             <div className="aspect-video bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] flex items-center justify-center relative overflow-hidden">
               {videoUrl ? (
@@ -743,7 +743,7 @@ export default function SessionPage() {
                   Search & Change Media
                 </button>
 
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
                     placeholder="Or paste YouTube/Vimeo URL"
@@ -768,7 +768,7 @@ export default function SessionPage() {
 
           <div className="space-y-6">
             <div className="bg-[#1A1A1A] rounded-xl border border-[#2A2A2A] p-6">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                 <h3 className="font-semibold">Participants</h3>
                 <span className="text-sm text-[#9CA3AF]">{participants.length} / 30</span>
               </div>
@@ -826,7 +826,7 @@ export default function SessionPage() {
               </div>
               <div className="space-y-2">
                 <p className="text-xs text-[#F59E0B]">Slow mode: 10 msg / 30s</p>
-                <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                   <input
                     type="text"
                     placeholder="Type a message..."

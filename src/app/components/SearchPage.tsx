@@ -91,7 +91,7 @@ export default function SearchPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       <Navigation />
 
-      <div className="max-w-6xl mx-auto px-4 lg:px-8 py-12">
+      <div className="max-w-6xl mx-auto px-4 lg:px-8 pt-24 pb-12 mt-4">
         <div className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
             <SearchIcon className="w-8 h-8 text-[#8B5CF6]" />

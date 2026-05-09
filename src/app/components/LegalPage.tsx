@@ -22,7 +22,7 @@ export default function LegalPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       <Navigation />
 
-      <main className="max-w-5xl mx-auto px-4 lg:px-8 py-12 lg:py-20 space-y-8">
+      <main className="max-w-5xl mx-auto px-4 lg:px-8 pt-24 pb-12 lg:pb-20 mt-4 space-y-8">
         <h1 className="text-4xl lg:text-5xl font-bold text-center">Legal & Compliance</h1>
 
         <div className="flex flex-wrap gap-4 justify-center">

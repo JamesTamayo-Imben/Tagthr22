@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase, Session, getParticipantToken, sessionOperations, participantOperations } from '../../lib/supabaseClient';
 import { Clock, Crown, Users, Play, Lock, MoreVertical, Power, RotateCw } from 'lucide-react';
+import Navigation from './Navigation';
 
 interface RecentSession extends Session {
   role: 'host' | 'member';
@@ -13,6 +14,7 @@ export default function RecentParties() {
   const [loading, setLoading] = useState(true);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     fetchRecentSessions();
@@ -146,7 +148,10 @@ export default function RecentParties() {
   };
 
   return (
-    <div className="space-y-8 pt-8">
+    <div className="min-h-screen bg-[#0A0A0A] text-white">
+      {location.pathname !== '/' && <Navigation/>}
+
+    <main className="relative max-w-7xl mx-auto px-4 lg:px-8 pt-24 pb-12 lg:pb-20 mt-4">
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <Clock className="w-6 h-6 text-[#06B6D4]" />
@@ -290,6 +295,9 @@ export default function RecentParties() {
             ))}
           </div>
         )}
+    </main>
     </div>
+
+
   );
 }

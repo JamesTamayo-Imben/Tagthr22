@@ -9,7 +9,7 @@ export default function AboutPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       <Navigation />
 
-      <main className="max-w-5xl mx-auto px-4 lg:px-8 py-12 lg:py-20 space-y-16">
+      <main className="max-w-5xl mx-auto px-4 lg:px-8 pt-24 pb-12 lg:pb-20 mt-4 space-y-16">
         <section className="text-center space-y-4">
           <h1 className="text-4xl lg:text-5xl font-bold">What is Tagthr?</h1>
           <p className="text-xl text-[#9CA3AF]">

@@ -211,41 +211,41 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#0A0A0A] text-white overflow-hidden">
       <Navigation />
 
-      <main className="relative max-w-7xl mx-auto px-4 lg:px-8 py-12 lg:py-20">
-        <div className="grid lg:grid-cols-2 gap-12 items-center mb-20">
-          <div className="space-y-8 z-10">
+      <main className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12 lg:pb-20 mt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center mb-20">
+          <div className="space-y-6 z-10 max-w-2xl">
             <div className="space-y-4">
-              <p className="text-[#9CA3AF] text-lg">Tag along. Watch together.</p>
-              <h1 className="text-4xl lg:text-6xl font-bold leading-tight">
+              <p className="text-[#9CA3AF] text-base sm:text-lg">Tag along. Watch together.</p>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
                 Search, Sync, <span className="text-[#F59E0B]">Share</span>
                 <br />
                 <span className="text-[#8B5CF6]">Together</span>
               </h1>
-              <p className="text-[#9CA3AF] text-lg">
+              <p className="text-[#9CA3AF] text-base sm:text-lg max-w-xl">
                 No accounts. No downloads. Just a link.
               </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
               <button
                 onClick={createPublicParty}
-                className="px-8 py-4 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] rounded-xl font-medium text-lg hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-4 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] rounded-2xl font-medium text-sm sm:text-base hover:opacity-90 transition-opacity flex items-center justify-center gap-2"
               >
-                <Plus className="w-5 h-5" />
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
                 Public Party
               </button>
               <button
                 onClick={() => setShowPrivateModal(true)}
-                className="px-8 py-4 border-2 border-[#8B5CF6] text-[#8B5CF6] rounded-xl font-medium text-lg hover:bg-[#8B5CF6] hover:text-white transition-colors flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-4 border-2 border-[#8B5CF6] text-[#8B5CF6] rounded-2xl font-medium text-sm sm:text-base hover:bg-[#8B5CF6] hover:text-white transition-colors flex items-center justify-center gap-2"
               >
-                <Lock className="w-5 h-5" />
+                <Lock className="w-4 h-4 sm:w-5 sm:h-5" />
                 Private Party
               </button>
               <button
                 onClick={() => setShowJoinModal(true)}
-                className="px-8 py-4 border-2 border-[#06B6D4] text-[#06B6D4] rounded-xl font-medium text-lg hover:bg-[#06B6D4] hover:text-white transition-colors flex items-center justify-center gap-2"
+                className="w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-4 border-2 border-[#06B6D4] text-[#06B6D4] rounded-2xl font-medium text-sm sm:text-base hover:bg-[#06B6D4] hover:text-white transition-colors flex items-center justify-center gap-2"
               >
-                <LogIn className="w-5 h-5" />
+                <LogIn className="w-4 h-4 sm:w-5 sm:h-5" />
                 Join Room
               </button>
             </div>
