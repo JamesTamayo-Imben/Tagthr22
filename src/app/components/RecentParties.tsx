@@ -147,11 +147,13 @@ export default function RecentParties() {
     }
   };
 
+  const isHome = location.pathname === '/';
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       {location.pathname !== '/' && <Navigation/>}
 
-    <main className="relative max-w-7xl mx-auto px-4 lg:px-8 pt-24 pb-12 lg:pb-20 mt-4">
+    <main className={`${!isHome ? 'px-4 lg:px-8 pb-12 lg:pb-20' : ''} relative max-w-7xl mx-auto mt-4 pt-24`}>
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <Clock className="w-6 h-6 text-[#06B6D4]" />
