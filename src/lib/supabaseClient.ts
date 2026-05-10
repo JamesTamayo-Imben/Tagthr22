@@ -39,6 +39,8 @@ export interface Session {
     year?: string;
     rating?: string;
     imdbId?: string;
+    type?: 'movie' | 'series';
+    tmdbId?: number;
   };
   expires_at: string;
   created_at: string;

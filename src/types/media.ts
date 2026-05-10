@@ -1,4 +1,6 @@
 export interface MediaItem {
+  /** Stable key for lists (TMDB-based until IMDb id is known). */
+  id: string;
   title: string;
   year: string;
   type: 'movie' | 'series';
@@ -8,17 +10,7 @@ export interface MediaItem {
   rating?: string;
   genre?: string;
   cast?: string;
-}
-
-export interface SearchResult {
-  '#TITLE': string;
-  '#YEAR': string;
-  '#IMDB_ID': string;
-  '#IMG_POSTER': string;
-  '#ACTORS'?: string;
-  '#RANK'?: string;
-}
-
-export interface SearchResponse {
-  description: SearchResult[];
+  tmdbId?: number;
+  /** Resolved YouTube (or other) URL for the built-in player; set when creating / joining a party. */
+  playbackUrl?: string;
 }

@@ -5,9 +5,15 @@ interface MediaDetailModalProps {
   media: MediaItem | null;
   onClose: () => void;
   onCreateParty: (media: MediaItem) => void;
+  createDisabled?: boolean;
 }
 
-export default function MediaDetailModal({ media, onClose, onCreateParty }: MediaDetailModalProps) {
+export default function MediaDetailModal({
+  media,
+  onClose,
+  onCreateParty,
+  createDisabled = false,
+}: MediaDetailModalProps) {
   if (!media) return null;
 
   return (
@@ -73,7 +79,7 @@ export default function MediaDetailModal({ media, onClose, onCreateParty }: Medi
                 <div className="flex items-center gap-2">
                   <Star className="w-5 h-5 text-[#F59E0B] fill-[#F59E0B]" />
                   <span className="text-lg font-semibold">{media.rating}</span>
-                  <span className="text-[#9CA3AF]">IMDb Rating</span>
+                  <span className="text-[#9CA3AF]">Rating (0–10)</span>
                 </div>
               )}
 
@@ -107,16 +113,25 @@ export default function MediaDetailModal({ media, onClose, onCreateParty }: Medi
                 </div>
               )}
 
-              <div>
-                <h3 className="text-sm font-semibold text-[#9CA3AF] mb-2">IMDb ID</h3>
-                <code className="px-3 py-1 bg-[#0A0A0A] rounded-lg text-sm">{media.imdbId}</code>
-              </div>
+              {media.imdbId?.startsWith('tt') && (
+                <div>
+                  <h3 className="text-sm font-semibold text-[#9CA3AF] mb-2">IMDb ID</h3>
+                  <code className="px-3 py-1 bg-[#0A0A0A] rounded-lg text-sm">{media.imdbId}</code>
+                </div>
+              )}
+
+              <p className="text-sm text-[#9CA3AF]">
+                The party player uses an official YouTube trailer when TMDB provides one; otherwise you can paste a
+                YouTube or Vimeo link in the room.
+              </p>
 
               <button
+                type="button"
+                disabled={createDisabled}
                 onClick={() => onCreateParty(media)}
-                className="w-full px-8 py-4 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] rounded-xl font-medium text-lg hover:opacity-90 transition-opacity"
+                className="w-full px-8 py-4 bg-gradient-to-r from-[#8B5CF6] to-[#7C3AED] rounded-xl font-medium text-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:pointer-events-none"
               >
-                Create Party with this Media
+                {createDisabled ? 'Creating…' : 'Create Party with this Media'}
               </button>
             </div>
           </div>

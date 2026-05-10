@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Plus, Lock, LogIn, AlertCircle } from 'lucide-react';
 import Navigation from './Navigation';
@@ -6,9 +6,13 @@ import SearchBar from './SearchBar';
 import SearchResultCard from './SearchResultCard';
 import MediaDetailModal from './MediaDetailModal';
 import RecentParties from './RecentParties';
-import { MediaItem, SearchResponse } from '../../types/media';
+import { MediaItem } from '../../types/media';
 import { useSessionLimit } from '../../hooks/useSessionLimit';
 import { sessionOperations, participantOperations, getParticipantToken } from '../../lib/supabaseClient';
+import { isMediaSearchConfigured } from '../../lib/tmdbApi';
+import { resolvePlaybackUrl } from '../../lib/tmdbTrailer';
+import { usePagedMediaSearch } from '../../hooks/usePagedMediaSearch';
+import SearchResultsPagination from './SearchResultsPagination';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -18,8 +22,17 @@ export default function LandingPage() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [roomSlug, setRoomSlug] = useState('');
   const [pin, setPin] = useState('');
-  const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const {
+    displayedItems: searchResults,
+    currentPage: searchPage,
+    canGoNext: searchCanGoNext,
+    canGoPrev: searchCanGoPrev,
+    loading: searchLoading,
+    searchError,
+    runNewSearch,
+    goNext: searchGoNext,
+    goPrev: searchGoPrev,
+  } = usePagedMediaSearch();
   const [selectedMedia, setSelectedMedia] = useState<MediaItem | null>(null);
   const [activeSessionCount, setActiveSessionCount] = useState(0);
 
@@ -109,47 +122,15 @@ export default function LandingPage() {
     };
   };
 
-  const searchMedia = async (query: string) => {
-    if (!query.trim()) {
-      setSearchResults([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(`https://imdb.iamidiotareyoutoo.com/search?title=${encodeURIComponent(query)}`);
-      const data: SearchResponse = await response.json();
-
-      if (data && Array.isArray(data.description)) {
-        const items: MediaItem[] = data.description.slice(0, 12).map((item) => ({
-          title: item['#TITLE'] || 'Unknown Title',
-          year: item['#YEAR'] || 'N/A',
-          type: (item['#ACTORS'] ? 'movie' : 'series') as 'movie' | 'series',
-          imdbId: item['#IMDB_ID'] || '',
-          poster: item['#IMG_POSTER'] || '',
-          rating: item['#RANK'] || 'N/A',
-        }));
-        setSearchResults(items);
-      } else {
-        setSearchResults([]);
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const debouncedSearch = useCallback(debounce(searchMedia, 500), []);
+  const debouncedSearch = useMemo(
+    () => debounce((q: string) => void runNewSearch(q), 500),
+    [runNewSearch]
+  );
 
   const handleSearch = (query: string) => {
     if (!query.trim()) {
-      setSearchResults([]);
-      setLoading(false);
+      void runNewSearch('');
     } else {
-      setLoading(true);
       debouncedSearch(query);
     }
   };
@@ -181,27 +162,31 @@ export default function LandingPage() {
     }
 
     try {
-      // Create session with media metadata
+      const playbackUrl = (await resolvePlaybackUrl(media)) || undefined;
+      const mediaWithPlayback: MediaItem = { ...media, playbackUrl };
+
       const metadata = {
         title: media.title,
         poster: media.poster,
         year: media.year,
         rating: media.rating,
         imdbId: media.imdbId,
+        type: media.type,
+        tmdbId: media.tmdbId,
       };
 
       const session = await sessionOperations.createSession(
         slug,
         token,
-        media.poster, // Use poster as video_url for display
+        playbackUrl,
         undefined,
         metadata
       );
-      
+
       // Join as host
       await participantOperations.joinSession(session.id, token, 'host');
 
-      navigate(`/party/${slug}`, { state: { media } });
+      navigate(`/party/${slug}`, { state: { media: mediaWithPlayback } });
     } catch (error) {
       console.error('Error creating party:', error);
     }
@@ -305,22 +290,54 @@ export default function LandingPage() {
             <p className="text-[#9CA3AF] text-lg">Search our vast library and create a watch party instantly</p>
           </div>
 
-          <SearchBar onSearch={handleSearch} loading={loading} />
+          <SearchBar onSearch={handleSearch} loading={searchLoading} />
 
-          {searchResults.length > 0 && (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
-              {searchResults.map((result) => (
-                <SearchResultCard
-                  key={result.imdbId}
-                  result={result}
-                  onPreview={handlePreview}
-                  onSelect={handleSelect}
-                />
-              ))}
-            </div>
+          {!isMediaSearchConfigured() && (
+            <p className="text-center text-sm text-amber-400/90 max-w-xl mx-auto">
+              Media search uses The Movie Database. Add{' '}
+              <code className="text-amber-200/90">VITE_TMDB_READ_ACCESS_TOKEN</code> or{' '}
+              <code className="text-amber-200/90">VITE_TMDB_API_KEY</code> to your{' '}
+              <code className="text-amber-200/90">.env</code> (free at{' '}
+              <a
+                href="https://www.themoviedb.org/settings/api"
+                className="underline text-amber-200 hover:text-white"
+                target="_blank"
+                rel="noreferrer"
+              >
+                themoviedb.org/settings/api
+              </a>
+              ), then restart the dev server.
+            </p>
           )}
 
-          {!loading && searchResults.length === 0 && (
+          {searchError && (
+            <p className="text-center text-sm text-red-400 max-w-xl mx-auto">{searchError}</p>
+          )}
+
+          {searchResults.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
+                {searchResults.map((result) => (
+                  <SearchResultCard
+                    key={result.id}
+                    result={result}
+                    onPreview={handlePreview}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </div>
+              <SearchResultsPagination
+                currentPage={searchPage}
+                onPrev={searchGoPrev}
+                onNext={searchGoNext}
+                canPrev={searchCanGoPrev}
+                canNext={searchCanGoNext}
+                loading={searchLoading}
+              />
+            </>
+          )}
+
+          {!searchLoading && searchResults.length === 0 && (
             <div className="text-center py-12">
               <p className="text-[#9CA3AF]">Search for movies and TV series to get started</p>
             </div>
