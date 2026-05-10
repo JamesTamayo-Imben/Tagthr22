@@ -55,7 +55,7 @@ export default function Navigation() {
     }`}>
       <div className="relative mx-auto flex w-full max-w-7xl items-center justify-between px-3 sm:px-4 lg:px-8 py-4 sm:py-6 gap-8 sm:gap-4">
         <Link to="/" className="flex items-center gap-2 flex-shrink-0">
-          <img className="h-6 sm:h-7" src="assets/Logo1.png" alt="Logo1" />
+          <img className="h-6 sm:h-7" src="images/Logo1.png" alt="Logo1" />
         </Link>
 
                   <div className="hidden md:flex items-center gap-3 sm:gap-4 md:gap-6 lg:gap-8 flex-wrap flex-1 justify-center md:justify-start md:flex-1 w-auto">
